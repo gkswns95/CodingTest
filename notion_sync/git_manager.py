@@ -128,23 +128,30 @@ def commit(message: Optional[str] = None) -> Tuple[bool, str]:
     return run_git_command(['commit', '-m', message])
 
 
-def push(remote: str = 'origin', branch: str = 'main') -> Tuple[bool, str]:
+def get_current_branch() -> str:
+    """Get the current git branch name."""
+    success, output = run_git_command(['rev-parse', '--abbrev-ref', 'HEAD'])
+    if success and output:
+        return output
+    return 'master'  # Default fallback
+
+
+def push(remote: str = 'origin', branch: str = None) -> Tuple[bool, str]:
     """
     Push commits to remote repository.
     
     Args:
         remote: Remote name (default: origin).
-        branch: Branch name (default: main).
+        branch: Branch name (default: auto-detect current branch).
         
     Returns:
         Tuple of (success, output/error message).
     """
-    # Try pushing to the specified branch
-    success, output = run_git_command(['push', '-u', remote, branch])
+    if branch is None:
+        branch = get_current_branch()
     
-    if not success and 'master' in output.lower():
-        # Try with master branch if main doesn't exist
-        return run_git_command(['push', '-u', remote, 'master'])
+    # Push to the current branch
+    success, output = run_git_command(['push', '-u', remote, branch])
     
     return success, output
 
