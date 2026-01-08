@@ -1,7 +1,10 @@
 # Notion Sync
 .env
 
-# Python
+# Python files in problem folders (only .md files should be uploaded)
+BFS/*.py
+DFS/*.py
+Uncategorized/*.py
 __pycache__/
 *.py[cod]
 *$py.class
@@ -20,3 +23,4 @@ ENV/
 # OS
 .DS_Store
 Thumbs.db
+
