@@ -168,7 +168,7 @@ def save_page_files(
     output_dir: Optional[Path] = None
 ) -> Tuple[Optional[str], Optional[str]]:
     """
-    Save a page as Markdown and Python files.
+    Save a page as Markdown file.
     
     Args:
         title: Page title (used for filename).
@@ -177,7 +177,7 @@ def save_page_files(
         output_dir: Base output directory (default: OUTPUT_DIR from config).
         
     Returns:
-        Tuple of (markdown_path, python_path) or (None, None) if failed.
+        Tuple of (markdown_path, None).
     """
     if output_dir is None:
         output_dir = OUTPUT_DIR
@@ -200,21 +200,11 @@ def save_page_files(
     # Generate Markdown content
     markdown_content = blocks_to_markdown(blocks)
     
-    # Extract Python code
-    python_codes = extract_code_blocks(blocks, 'python')
-    
-    # Save Markdown file
+    # Save Markdown file only
     md_path = folder_path / f'{base_filename}.md'
     with open(md_path, 'w', encoding='utf-8') as f:
         f.write(f'# {title}\n\n')
         f.write(markdown_content)
     
-    # Save Python file if there's code
-    py_path = None
-    if python_codes:
-        py_path = folder_path / f'{base_filename}.py'
-        with open(py_path, 'w', encoding='utf-8') as f:
-            # Combine all code blocks with separators
-            f.write('\n\n# ---\n\n'.join(python_codes))
-    
-    return str(md_path), str(py_path) if py_path else None
+    return str(md_path), None
+
