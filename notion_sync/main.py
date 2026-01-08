@@ -16,6 +16,7 @@ from .git_manager import sync_to_github, setup_repo, get_changed_files
 def pull_from_notion() -> bool:
     """
     Pull content from Notion and save as local files.
+    Uses heading_2 blocks to determine category, dividers to separate sections.
     
     Returns:
         True if successful, False otherwise.
@@ -23,47 +24,98 @@ def pull_from_notion() -> bool:
     print('🔄 Fetching pages from Notion...')
     
     try:
-        # Get child pages from main page
-        pages = get_database_pages()
-        print(f'  Found {len(pages)} child page(s)')
+        from notion_sync.notion_client import get_notion_client
+        from notion_sync.config import NOTION_DATABASE_ID
+        import re
         
-        if not pages:
-            print('  No child pages found.')
-            return True
+        # Format database ID
+        db_id = NOTION_DATABASE_ID
+        if '-' not in db_id and len(db_id) == 32:
+            db_id = f'{db_id[:8]}-{db_id[8:12]}-{db_id[12:16]}-{db_id[16:20]}-{db_id[20:]}'
         
+        # Get all blocks from main page
+        client = get_notion_client()
+        blocks = []
+        has_more = True
+        start_cursor = None
+        
+        while has_more:
+            response = client.blocks.children.list(
+                block_id=db_id,
+                start_cursor=start_cursor
+            )
+            blocks.extend(response.get('results', []))
+            has_more = response.get('has_more', False)
+            start_cursor = response.get('next_cursor')
+        
+        print(f'  Found {len(blocks)} blocks in main page')
+        
+        # Parse blocks to find categories and pages
+        current_category = None
+        pages_to_save = []
+        
+        for block in blocks:
+            block_type = block.get('type')
+            
+            # Heading marks start of a new category
+            if block_type in ('heading_1', 'heading_2', 'heading_3'):
+                heading_data = block.get(block_type, {})
+                rich_text = heading_data.get('rich_text', [])
+                if rich_text:
+                    heading_text = rich_text[0].get('plain_text', '')
+                    # Extract category from heading (e.g., "DFS (Depth First Search)" -> "DFS")
+                    if 'DFS' in heading_text.upper():
+                        current_category = 'DFS'
+                        print(f'  📁 Category: {heading_text} → DFS')
+                    elif 'BFS' in heading_text.upper():
+                        current_category = 'BFS'
+                        print(f'  📁 Category: {heading_text} → BFS')
+                    elif 'DP' in heading_text.upper():
+                        current_category = 'DP'
+                        print(f'  📁 Category: {heading_text} → DP')
+                    else:
+                        # Unknown category heading
+                        category_match = re.match(r'^(\w+)', heading_text)
+                        if category_match:
+                            current_category = category_match.group(1)
+                            print(f'  📁 Category: {heading_text} → {current_category}')
+            
+            # Divider optionally resets category (but we keep the current one)
+            # since pages after divider but before next heading would be uncategorized
+            
+            # Child page - save with current category
+            elif block_type == 'child_page':
+                page_info = block.get('child_page', {})
+                title = page_info.get('title', 'Untitled')
+                page_id = block.get('id')
+                
+                if title and title != 'Untitled':
+                    pages_to_save.append({
+                        'id': page_id,
+                        'title': title,
+                        'category': current_category
+                    })
+        
+        print(f'\n  Found {len(pages_to_save)} pages to save')
+        
+        # Save each page
         saved_count = 0
-        for page in pages:
-            title = page.get('title', 'Untitled')
-            page_id = page.get('id')
+        for page in pages_to_save:
+            title = page['title']
+            page_id = page['id']
+            category = page['category']
             
-            if not title or title == 'Untitled':
-                print(f'  ⚠️  Skipping page without title')
-                continue
+            print(f'  📄 {title} → {category or "Uncategorized"}')
             
-            print(f'  📄 Processing: {title}')
-            
-            # Get page content (blocks)
+            # Get page content
             blocks = get_page_blocks(page_id)
             
-            # Extract category from title (e.g., "(DFS)" or "(BFS)")
-            import re
-            category = None
-            category_match = re.search(r'\((DFS|BFS|DP|그래프|정렬|탐색|트리|힙|스택|큐|해시)\)', title, re.IGNORECASE)
-            if category_match:
-                category = category_match.group(1).upper()
-            elif 'DFS' in title.upper():
-                category = 'DFS'
-            elif 'BFS' in title.upper():
-                category = 'BFS'
-            
             # Save files
-            md_path, py_path = save_page_files(title, category, blocks)
+            md_path, _ = save_page_files(title, category, blocks)
             
             if md_path:
-                print(f'     → Saved: {md_path}')
+                print(f'     → {md_path}')
                 saved_count += 1
-            if py_path:
-                print(f'     → Saved: {py_path}')
         
         print(f'\n✅ Saved {saved_count} page(s) to local files')
         return True
